@@ -32,7 +32,7 @@ cp "$ROOT/tutorial.pdf" "$APP/Contents/Resources/"
 "$QT_BIN/macdeployqt" "$APP" -qmldir="$ROOT/pdf_viewer/touchui" -always-overwrite -codesign=-
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
-lipo -verify_arch "$ARCH" "$APP/Contents/MacOS/sioyek"
+lipo "$APP/Contents/MacOS/sioyek" -verify_arch "$ARCH"
 # Stage only the app and the Applications shortcut, not build intermediates.
 STAGE=$(mktemp -d "$ROOT/build/dmg-stage.XXXXXX")
 trap 'rm -rf "$STAGE"' EXIT

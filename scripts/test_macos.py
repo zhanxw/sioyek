@@ -29,14 +29,14 @@ def main():
     binary = app / 'Contents/MacOS/sioyek'
     pdf = app / 'Contents/Resources/tutorial.pdf'
     run('codesign', '--verify', '--deep', '--strict', str(app))
-    run('lipo', '-verify_arch', os.uname().machine, str(binary))
+    run('lipo', str(binary), '-verify_arch', os.uname().machine)
     # Every embedded Mach-O must be native and independent of the build machine.
     for path in app.rglob('*'):
         if not path.is_file() or path.is_symlink():
             continue
         if 'Mach-O' not in run('file', '-b', str(path)):
             continue
-        run('lipo', '-verify_arch', os.uname().machine, str(path))
+        run('lipo', str(path), '-verify_arch', os.uname().machine)
         for line in run('otool', '-L', str(path)).splitlines()[1:]:
             dep = line.strip().split(' (')[0]
             assert dep.startswith(('@', '/usr/lib/', '/System/Library/')), (path, dep)
