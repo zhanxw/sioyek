@@ -37,11 +37,14 @@ def main():
         if 'Mach-O' not in run('file', '-b', str(path)):
             continue
         run('lipo', str(path), '-verify_arch', os.uname().machine)
+        identities = set(run('otool', '-D', str(path)).splitlines())
         for line in run('otool', '-L', str(path)).splitlines():
             # Universal binaries have an unindented header for each slice.
             if not line.startswith('\t'):
                 continue
             dep = line.strip().split(' (')[0]
+            if dep in identities:  # LC_ID_DYLIB is metadata, not a load command.
+                continue
             assert dep.startswith(('@', '/usr/lib/', '/System/Library/')), (path, dep)
     print(run(str(binary), '--version').strip(), flush=True)
     # Unset developer Qt paths to test deployment, rather than the installed SDK.

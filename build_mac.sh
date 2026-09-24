@@ -17,6 +17,8 @@ make -C mupdf -j"$JOBS" build=release "OUT=build/mac-$ARCH" \
     HAVE_GLUT=no HAVE_X11=no HAVE_LIBCRYPTO=no USE_SYSTEM_LIBS=no libs libmupdf-threads
 mkdir -p "build/mac-$ARCH"
 cd "build/mac-$ARCH"
+# Regenerate the bundle so old SDK libraries cannot survive an incremental build.
+rm -rf sioyek.app
 "$QMAKE" "$ROOT/pdf_viewer_build_config.pro" CONFIG+=release CONFIG+=non_portable \
     "QMAKE_APPLE_DEVICE_ARCHS=$ARCH" \
     "QMAKE_MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET" \
@@ -30,7 +32,7 @@ done
 cp "$ROOT/tutorial.pdf" "$APP/Contents/Resources/"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MACOSX_DEPLOYMENT_TARGET" "$APP/Contents/Info.plist"
 "$QT_BIN/macdeployqt" "$APP" -qmldir="$ROOT/pdf_viewer/touchui" \
-    -libpath="$($QMAKE -query QT_INSTALL_LIBS)" -always-overwrite -codesign=-
+    -libpath="$($QMAKE -query QT_INSTALL_LIBS)" -appstore-compliant -codesign=-
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 lipo "$APP/Contents/MacOS/sioyek" -verify_arch "$ARCH"
