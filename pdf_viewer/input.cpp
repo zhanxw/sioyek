@@ -4817,12 +4817,9 @@ public:
 
     void perform() {
         widget->handle_close_event();
-        if (QGuiApplication::instance() && QGuiApplication::applicationState() == Qt::ApplicationState::ApplicationActive) {
-            QGuiApplication::quit();
-        }
-        else{
-            exit(0);
-        }
+        // Always unwind the event loop so renderer threads and databases are
+        // cleaned up, including when quitting through the command-line IPC.
+        QGuiApplication::quit();
     }
 
 

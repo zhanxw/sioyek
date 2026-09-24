@@ -1,64 +1,47 @@
 #!/usr/bin/env bash
-set -e
-# prerequisite: brew install qt@5 freeglut mesa harfbuzz
-
-#sys_glut_clfags=`pkg-config --cflags glut gl`
-#sys_glut_libs=`pkg-config --libs glut gl`
-#sys_harfbuzz_clfags=`pkg-config --cflags harfbuzz`
-#sys_harfbuzz_libs=`pkg-config --libs harfbuzz`
-
-if [ -z ${MAKE_PARALLEL+x} ]; then export MAKE_PARALLEL=1; else echo "MAKE_PARALLEL defined"; fi
-echo "MAKE_PARALLEL set to $MAKE_PARALLEL"
-
-cd mupdf
-#make USE_SYSTEM_HARFBUZZ=yes USE_SYSTEM_GLUT=yes SYS_GLUT_CFLAGS="${sys_glut_clfags}" SYS_GLUT_LIBS="${sys_glut_libs}" SYS_HARFBUZZ_CFLAGS="${sys_harfbuzz_clfags}" SYS_HARFBUZZ_LIBS="${sys_harfbuzz_libs}" -j 4
-make HAVE_GLUT=no -j$MAKE_PARALLEL
-cd ..
-
-sed -Ei '' "s/QMAKE_MACOSX_DEPLOYMENT_TARGET.=.[0-9]+/QMAKE_MACOSX_DEPLOYMENT_TARGET = $(sw_vers -productVersion | cut -d. -f1)/" pdf_viewer_build_config.pro
-
-if [[ $1 == portable ]]; then
-	qmake pdf_viewer_build_config.pro
-else
-	qmake "CONFIG+=non_portable" pdf_viewer_build_config.pro
-fi
-
-make -j$MAKE_PARALLEL
-
-rm -rf build 2> /dev/null
-mkdir build
-mv sioyek.app build/
-cp -r pdf_viewer/shaders build/sioyek.app/Contents/Resources/shaders
-
-cp pdf_viewer/prefs.config build/sioyek.app/Contents/Resources/prefs.config
-cp pdf_viewer/prefs_user.config build/sioyek.app/Contents/Resources/prefs_user.config
-cp pdf_viewer/keys.config build/sioyek.app/Contents/Resources/keys.config
-cp pdf_viewer/keys_user.config build/sioyek.app/Contents/Resources/keys_user.config
-cp tutorial.pdf build/sioyek.app/Contents/Resources/tutorial.pdf
-
-# Capture the current PATH
-CURRENT_PATH=$(echo $PATH)
-
-# Define the path to the Info.plist file inside the app bundle
-INFO_PLIST="build/sioyek.app/Contents/Info.plist"
-
-# Add LSEnvironment key with PATH to Info.plist
-/usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST" || echo "LSEnvironment already exists"
-/usr/libexec/PlistBuddy -c "Add :LSEnvironment:PATH string $CURRENT_PATH" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PATH $CURRENT_PATH" "$INFO_PLIST"
-
-# Hack is required to avoid race condition in macos in CI
-# See https://github.com/actions/runner-images/issues/7522
-if [[ -n "$GITHUB_ACTIONS" ]]; then
-  echo killing...; sudo pkill -9 XProtect >/dev/null || true;
-  echo waiting...; while pgrep XProtect; do sleep 3; done;
-fi
-
-sleep 5
-
-# mac deploys with qml currently don't work due to a qt bug
-# macdeployqt build/sioyek.app -qmldir=./pdf_viewer/touchui -dmg
-macdeployqt build/sioyek.app -dmg
-
-codesign --force --deep --sign - build/sioyek.app
-
-zip -r sioyek-release-mac.zip build/sioyek.dmg
+# Build a native, self-contained macOS app and sign it BEFORE creating the DMG.
+set -euo pipefail
+cd "$(dirname "$0")"
+ROOT="$PWD"
+ARCH="${SIOYEK_ARCH:-$(uname -m)}"
+case "$ARCH" in arm64|x86_64) ;; *) echo "Unsupported architecture: $ARCH" >&2; exit 1;; esac
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
+JOBS="${MAKE_PARALLEL:-$(sysctl -n hw.logicalcpu)}"
+QMAKE="${QMAKE:-qmake}"
+QT_BIN="$($QMAKE -query QT_INSTALL_BINS)"
+case "$($QMAKE -query QT_VERSION)" in 6.*) ;; *) echo 'Qt 6 is required.' >&2; exit 1;; esac
+[[ -f mupdf/thirdparty/freetype/Makefile ]] || { echo 'Run git submodule update --init --recursive first.' >&2; exit 1; }
+# Separate MuPDF output by architecture; never accidentally link stale Intel objects.
+make -C mupdf -j"$JOBS" build=release "OUT=build/mac-$ARCH" \
+    "XCFLAGS=-arch $ARCH -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET" \
+    HAVE_GLUT=no HAVE_X11=no HAVE_LIBCRYPTO=no USE_SYSTEM_LIBS=no libs libmupdf-threads
+mkdir -p "build/mac-$ARCH"
+cd "build/mac-$ARCH"
+"$QMAKE" "$ROOT/pdf_viewer_build_config.pro" CONFIG+=release CONFIG+=non_portable \
+    "QMAKE_APPLE_DEVICE_ARCHS=$ARCH" \
+    "QMAKE_MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET" \
+    "MUPDF_LIB_DIR=$ROOT/mupdf/build/mac-$ARCH"
+make -j"$JOBS"
+APP="$PWD/sioyek.app"
+cp -R "$ROOT/pdf_viewer/shaders" "$APP/Contents/Resources/"
+for resource in prefs.config prefs_user.config keys.config keys_user.config; do
+    cp "$ROOT/pdf_viewer/$resource" "$APP/Contents/Resources/"
+done
+cp "$ROOT/tutorial.pdf" "$APP/Contents/Resources/"
+/usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MACOSX_DEPLOYMENT_TARGET" "$APP/Contents/Info.plist"
+"$QT_BIN/macdeployqt" "$APP" -qmldir="$ROOT/pdf_viewer/touchui" -always-overwrite -codesign=-
+codesign --force --deep --sign - "$APP"
+codesign --verify --deep --strict --verbose=2 "$APP"
+lipo -verify_arch "$ARCH" "$APP/Contents/MacOS/sioyek"
+# Stage only the app and the Applications shortcut, not build intermediates.
+STAGE=$(mktemp -d "$ROOT/build/dmg-stage.XXXXXX")
+trap 'rm -rf "$STAGE"' EXIT
+ditto "$APP" "$STAGE/sioyek.app"
+ln -s /Applications "$STAGE/Applications"
+DMG="$ROOT/build/sioyek-macos-$ARCH.dmg"
+hdiutil create -ov -volname Sioyek -srcfolder "$STAGE" -format UDZO "$DMG"
+hdiutil verify "$DMG"
+(cd "$ROOT/build" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
+# Keep the archive expected by the existing upstream multi-platform workflows.
+zip -j -FS "$ROOT/sioyek-release-mac.zip" "$DMG"
+echo "Built $DMG"

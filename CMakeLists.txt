@@ -79,6 +79,7 @@ qt_add_executable(sioyek WIN32 MACOSX_BUNDLE
 )
 
 if(APPLE)
+    target_compile_options(sioyek PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/pdf_viewer/macos_compat.h")
     file(GLOB_RECURSE SIOYEK_SHADER_FILES CONFIGURE_DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/pdf_viewer/shaders/*"
     )

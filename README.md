@@ -6,7 +6,7 @@ Sioyek is a PDF viewer with a focus on textbooks and research papers.
 
 ## Q: There are build errors with Qt 5.*.
 
-A: If you are building the development branch you need to use Qt 6.7 or 6.8.
+A: This development branch requires Qt 6. The macOS workflow uses Qt 6.8.3.
 
 ## Q: On MacOS I get "sioyek is damaged and cannot be opened. It is recommended to eject the image.".
 
@@ -22,7 +22,19 @@ A: This is related to macOS quarantine. See https://github.com/ahrm/sioyek/discu
 * [Buy Me a Coffee (or a Book!)](#donation)
 
 ## Install
-### Official packages
+### Apple Silicon macOS (this fork)
+
+Download **sioyek-macos-arm64.dmg** from
+[this fork's latest release](https://github.com/zhanxw/sioyek/releases/latest).
+Requires an Apple Silicon Mac (M1 or later) running macOS 13 or later.
+Open the DMG and drag Sioyek to Applications. Qt and MuPDF are included;
+Rosetta and Homebrew are not required.
+
+These builds are **ad-hoc signed, not Apple-notarized**. If macOS blocks the first
+launch, use **System Settings → Privacy & Security → Open Anyway** for the app
+you downloaded from this repository. The release includes a SHA-256 checksum.
+
+### Official upstream packages
 There are installers for Windows, macOS and Linux. See [Releases page](https://github.com/ahrm/sioyek/releases).
 
 ### Homebew Cask
@@ -161,31 +173,61 @@ cd sioyek
 build_windows.bat
 ```
 
-### Mac
-1. Uninstall previous Qt6 installed by Homebrew
-2. Install Xcode.
-3. Install Qt6.
-```
-pip install aqtinstall
-cd /path/to/qt
-aqt install-qt mac desktop 6.8.2 clang_64 -m all
-export Qt6_DIR=/path/to/qt/6.8.2/macos/
-export QT_PLUGIN_PATH=/path/to/qt/6.8.2/macos/plugins
-export PKG_CONFIG_PATH=/path/to/qt/6.8.2/macos/lib/pkgconfig
-export QML2_IMPORT_PATH=/path/to/qt/6.8.2/macos/qml
-export PATH="/path/to/qt/6.8.2/macos/bin:$PATH"
-```
-4. Clone the repository, build and install:
-```
-git clone --recursive --branch development https://github.com/ahrm/sioyek
-cd sioyek
-chmod +x build_mac.sh
-setopt PIPE_FAIL PRINT_EXIT_VALUE ERR_RETURN SOURCE_TRACE XTRACE
-MAKE_PARALLEL=8 ./build_mac.sh
+### macOS (Apple Silicon)
 
-mv build/sioyek.app /Applications/
-sudo codesign --force --sign - --deep /Applications/sioyek.app
+Requires Xcode Command Line Tools and Qt 6. The release workflow uses Qt 6.8.3
+and targets macOS 13 or later. Build natively on an Apple Silicon Mac:
+
+```sh
+xcode-select --install  # if not already installed
+brew install qt
+git clone --recursive --branch development https://github.com/zhanxw/sioyek.git
+cd sioyek
+./build_mac.sh
 ```
+
+If Qt is installed elsewhere, set `QMAKE=/path/to/Qt/bin/qmake`.
+`MAKE_PARALLEL` controls build jobs (defaults to the number of logical CPUs).
+The script builds the pinned MuPDF dependencies, bundles Qt and QML dependencies,
+ad-hoc signs the app, verifies the signature, and then creates the disk image.
+It does not need freeglut, Mesa, or a separately installed MuPDF.
+
+Outputs:
+
+- `build/sioyek-macos-arm64.dmg` and its SHA-256 checksum.
+- `build/mac-arm64/sioyek.app` for local use.
+
+The architecture defaults to the host; `SIOYEK_ARCH` can explicitly select
+`arm64` or `x86_64` if the installed Qt supports it. Intel builds are not covered
+by the Apple Silicon release workflow. `MACOSX_DEPLOYMENT_TARGET` defaults to
+`13.0`; the Qt SDK and every dependency must also support the chosen version.
+
+Run the GUI smoke test in a logged-in macOS session:
+
+```sh
+python3 scripts/test_macos.py build/mac-arm64/sioyek.app
+```
+
+It verifies bundled library architectures and dependencies, code signing, PDF
+opening, page navigation, zoom, search, OpenGL screenshots, and clean shutdown.
+Logs and a rendered page are saved in `build/smoke-test/`. Test data is isolated
+using `--data-dir`; your reading history and preferences are not changed.
+Smoke tests reduce release regressions but cannot guarantee that no PDF or
+interaction will ever crash.
+
+### Automated macOS releases
+
+[macOS DMG workflow](https://github.com/zhanxw/sioyek/actions/workflows/macos-dmg.yml)
+builds and tests the app from the DMG on an Apple Silicon runner for pushes to
+`development`, pull requests, and manual runs. Successful builds upload the DMG
+and checksum as workflow artifacts. Push a tag named `macos-*` to automatically
+publish a GitHub release after the packaged app passes its tests:
+
+```sh
+git tag -a macos-YYYY.MM.DD -m "Apple Silicon release"
+git push origin macos-YYYY.MM.DD
+```
+
 
 ## Donation
 If you enjoy sioyek, please consider donating to support its development.

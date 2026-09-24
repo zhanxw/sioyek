@@ -1972,6 +1972,8 @@ QCommandLineParser* get_command_line_parser() {
     QCommandLineOption window_id_option("window-id", "Apply command to window with id <window-id>", "window-id");
     parser->addOption(window_id_option);
 
+    parser->addOption(QCommandLineOption("data-dir", "Use an isolated directory for application data and user configuration.", "path"));
+
     QCommandLineOption shared_database_path_option("shared-database-path", "Specify which file to use for shared data (bookmarks, highlights, etc.)", "path");
     parser->addOption(shared_database_path_option);
 

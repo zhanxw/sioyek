@@ -747,6 +747,18 @@ int main(int argc, char* args[]) {
     parser->process(app.arguments());
 
     configure_paths();
+    if (parser->isSet("data-dir")) {
+        standard_data_path = Path(parser->value("data-dir").toStdWString());
+        standard_data_path.create_directories();
+        database_file_path = standard_data_path.slash(L"test.db");
+        local_database_file_path = standard_data_path.slash(L"local.db");
+        global_database_file_path = standard_data_path.slash(L"shared.db");
+        last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
+        auto_config_path = standard_data_path.slash(L"auto.config");
+        downloaded_papers_path = standard_data_path.slash(L"downloads");
+        user_config_paths = {standard_data_path.slash(L"prefs_user.config")};
+        user_keys_paths = {standard_data_path.slash(L"keys_user.config")};
+    }
     verify_config_paths();
 
 
