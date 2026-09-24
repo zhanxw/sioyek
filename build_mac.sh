@@ -33,6 +33,13 @@ cp "$ROOT/tutorial.pdf" "$APP/Contents/Resources/"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MACOSX_DEPLOYMENT_TARGET" "$APP/Contents/Info.plist"
 "$QT_BIN/macdeployqt" "$APP" -qmldir="$ROOT/pdf_viewer/touchui" \
     -libpath="$($QMAKE -query QT_INSTALL_LIBS)" -appstore-compliant -codesign=-
+# Qt's binary SDK includes optional SQL drivers linked to vendor libraries on
+# the Qt build machine. Sioyek embeds SQLite; QML LocalStorage needs only qsqlite.
+for driver in "$APP/Contents/PlugIns/sqldrivers/"*.dylib; do
+    if [[ -f "$driver" && "$(basename "$driver")" != libqsqlite.dylib ]]; then
+        rm "$driver"
+    fi
+done
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 lipo "$APP/Contents/MacOS/sioyek" -verify_arch "$ARCH"

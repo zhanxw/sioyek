@@ -26,6 +26,7 @@ jobs:
           modules: 'qtshadertools qtmultimedia qtspeech'
           cache: true
       - name: Build native Apple Silicon DMG
+        id: build
         env:
           SIOYEK_ARCH: arm64
           MACOSX_DEPLOYMENT_TARGET: '13.0'
@@ -43,6 +44,7 @@ jobs:
           name: macos-smoke-test
           path: build/smoke-test/
       - name: Upload DMG
+        if: always() && steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: sioyek-macos-arm64
