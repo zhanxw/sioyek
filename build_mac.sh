@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 ROOT="$PWD"
 ARCH="${SIOYEK_ARCH:-$(uname -m)}"
 case "$ARCH" in arm64|x86_64) ;; *) echo "Unsupported architecture: $ARCH" >&2; exit 1;; esac
-export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-$(sw_vers -productVersion)}"
 JOBS="${MAKE_PARALLEL:-$(sysctl -n hw.logicalcpu)}"
 QMAKE="${QMAKE:-qmake}"
 QT_BIN="$($QMAKE -query QT_INSTALL_BINS)"
@@ -29,7 +29,8 @@ for resource in prefs.config prefs_user.config keys.config keys_user.config; do
 done
 cp "$ROOT/tutorial.pdf" "$APP/Contents/Resources/"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MACOSX_DEPLOYMENT_TARGET" "$APP/Contents/Info.plist"
-"$QT_BIN/macdeployqt" "$APP" -qmldir="$ROOT/pdf_viewer/touchui" -always-overwrite -codesign=-
+"$QT_BIN/macdeployqt" "$APP" -qmldir="$ROOT/pdf_viewer/touchui" \
+    -libpath="$($QMAKE -query QT_INSTALL_LIBS)" -always-overwrite -codesign=-
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 lipo "$APP/Contents/MacOS/sioyek" -verify_arch "$ARCH"

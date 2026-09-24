@@ -200,7 +200,9 @@ Outputs:
 The architecture defaults to the host; `SIOYEK_ARCH` can explicitly select
 `arm64` or `x86_64` if the installed Qt supports it. Intel builds are not covered
 by the Apple Silicon release workflow. `MACOSX_DEPLOYMENT_TARGET` defaults to
-`13.0`; the Qt SDK and every dependency must also support the chosen version.
+the build host macOS version (appropriate for Homebrew Qt). The release workflow
+explicitly targets `13.0` with its pinned Qt SDK. The Qt SDK and every dependency
+must support the chosen version.
 
 Run the GUI smoke test in a logged-in macOS session:
 

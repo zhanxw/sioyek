@@ -37,7 +37,10 @@ def main():
         if 'Mach-O' not in run('file', '-b', str(path)):
             continue
         run('lipo', str(path), '-verify_arch', os.uname().machine)
-        for line in run('otool', '-L', str(path)).splitlines()[1:]:
+        for line in run('otool', '-L', str(path)).splitlines():
+            # Universal binaries have an unindented header for each slice.
+            if not line.startswith('\t'):
+                continue
             dep = line.strip().split(' (')[0]
             assert dep.startswith(('@', '/usr/lib/', '/System/Library/')), (path, dep)
     print(run(str(binary), '--version').strip(), flush=True)
