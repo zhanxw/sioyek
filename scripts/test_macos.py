@@ -9,6 +9,7 @@ import os
 import re
 from pathlib import Path
 import subprocess
+import struct
 import tempfile
 import time
 import uuid
@@ -17,6 +18,26 @@ import uuid
 def run(*args, **kwargs):
     return subprocess.run(args, check=True, text=True, capture_output=True,
                           timeout=30, **kwargs).stdout
+
+
+def assert_rendered_page(screenshot):
+    # PNG byte size depends heavily on display resolution and compression.
+    # Inspect actual pixels instead: the tutorial must contain dark text.
+    bitmap = screenshot.with_suffix('.bmp')
+    run('sips', '-s', 'format', 'bmp', str(screenshot), '--out', str(bitmap))
+    data = bitmap.read_bytes()
+    offset = struct.unpack_from('<I', data, 10)[0]
+    width, height = struct.unpack_from('<ii', data, 18)
+    bits = struct.unpack_from('<H', data, 28)[0]
+    assert data[:2] == b'BM' and bits in (24, 32) and width > 100 and abs(height) > 100
+    stride = ((width * bits + 31) // 32) * 4
+    dark_pixels = sum(
+        max(data[pos:pos + 3]) < 128
+        for row in range(abs(height))
+        for pos in range(offset + row * stride, offset + row * stride + width * (bits // 8), bits // 8)
+    )
+    bitmap.unlink()
+    assert dark_pixels > 100, f'PDF framebuffer is blank ({dark_pixels} dark pixels)'
 
 
 def main():
@@ -107,7 +128,7 @@ def main():
                 command('toggle_dark_mode')
                 screenshot = output / 'rendered-page.png'
                 command(f'framebuffer_screenshot({screenshot})')
-                assert screenshot.stat().st_size > 10000, 'Missing or empty rendered PDF'
+                assert_rendered_page(screenshot)
                 (output / 'state.json').write_text(json.dumps(state(), indent=2))
                 # Exercise graceful Qt teardown, renderer thread joins and DB writes.
                 command('quit')
