@@ -6,6 +6,7 @@ Run in a logged-in macOS GUI session (also available on GitHub macOS runners).
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -68,7 +69,14 @@ def main():
 
                 def state():
                     result = command('get_state_json')
-                    return json.loads(result[result.index('['):])[0]
+                    # Startup diagnostics can surround the JSON IPC response.
+                    for match in re.finditer(r'\[\s*\{', result):
+                        try:
+                            states, _ = json.JSONDecoder().raw_decode(result[match.start():])
+                            return states[0]
+                        except json.JSONDecodeError:
+                            continue
+                    raise AssertionError(f'Missing window state in IPC response: {result!r}')
 
                 time.sleep(5)
                 initial = state()
@@ -78,6 +86,10 @@ def main():
                 first = state()
                 command('next_page')
                 time.sleep(1)
+                advanced = state()
+                assert advanced['y_offset'] > first['y_offset'], (first, advanced)
+                # At an exact page boundary Sioyek reports the preceding page.
+                command('next_page')
                 assert state()['page_number'] > first['page_number']
                 command('zoom_in')
                 assert state()['zoom_level'] > first['zoom_level']
